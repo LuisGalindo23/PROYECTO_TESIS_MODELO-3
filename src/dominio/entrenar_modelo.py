@@ -1,8 +1,8 @@
 """
 Entrena el modelo SVM de detección de phishing sobre todo el dataset en
 español y guarda el modelo entrenado junto con el vectorizador TF-IDF
-ajustado, para que el monitor de Outlook (src/monitor_outlook.py) pueda
-reutilizarlos sin volver a entrenar.
+ajustado, para que la Azure Function (function_app.py) pueda reutilizarlos
+sin volver a entrenar.
 
 La evaluación del modelo (src/dominio/evaluar_modelo.py) usa un dataset
 independiente, no un split de este archivo.
@@ -18,7 +18,7 @@ from src.dominio.features import crear_vectorizador_tfidf, construir_matriz_feat
 from src.dominio.limpieza_dataset import limpiar_dataset
 from src.dominio.validacion_kfold import validar_con_kfold
 
-RUTA_CSV_DEFECTO = "dataset/correos_dataset.csv"
+RUTA_CSV_DEFECTO = "dataset/spaphish_adaptado.csv"
 RUTA_MODELO_DEFECTO = "modelo/svm_phishing.pkl"
 RUTA_VECTORIZADOR_DEFECTO = "modelo/vectorizador_tfidf.pkl"
 

@@ -3,11 +3,10 @@ Nucleo de dominio: clasifica un Correo ya normalizado (ver
 src/dominio/correo.py) con el SVM entrenado y, si es phishing, delega
 marcar/mover al puerto GestorDeCorreoPort y dispara la notificacion
 inyectada (o ninguna, si se pasa None). No depende de ningun adaptador
-concreto (Outlook COM o Microsoft Graph) -- al contrario, ambos adaptadores
-(src/adaptadores/outlook_com_adapter.py, src/adaptadores/graph_api_adapter.py)
-importan de aqui las constantes de marcado/notificacion compartidas, para
-que no puedan divergir entre si -- en particular PREFIJO_ALERTA_NOTIFICACION,
-la unica salvaguarda contra un bucle infinito de auto-notificacion.
+concreto -- al contrario, el adaptador (src/adaptadores/graph_api_adapter.py)
+importa de aqui las constantes de marcado/notificacion compartidas, en
+particular PREFIJO_ALERTA_NOTIFICACION, la unica salvaguarda contra un
+bucle infinito de auto-notificacion.
 """
 import logging  #Modulo para operaciones de logs
 from datetime import datetime, timezone  #Para medir el tiempo medio de deteccion contra correo.hora_recepcion
@@ -159,8 +158,8 @@ def procesar_correo(
     Clasifica un unico Correo y, si es phishing, lo marca y mueve a traves
     de `gestor` (GestorDeCorreoPort), y notifica via `enviar_notificacion`
     -- pasar None desactiva el envio de notificaciones. Ambos colaboradores
-    son inyectados para que esta funcion no sepa si el correo vino de
-    Outlook COM o de Microsoft Graph. Retorna True si fue clasificado como
+    son inyectados para que esta funcion no dependa del adaptador de origen
+    concreto (hoy, Microsoft Graph). Retorna True si fue clasificado como
     phishing.
     """
     # Guard anti-bucle: si esta funcion detecta como phishing su propia
@@ -252,18 +251,14 @@ def ejecutar_ciclo_de_escaneo(
     """
     Recorre los correos no leidos (via gestor.obtener_no_leidos) y clasifica
     cada uno con procesar_correo. Retorna la cantidad marcada como phishing.
-    `a_correo` es el conversor especifico del adaptador (_item_a_correo
-    para COM, _mensaje_a_correo para Graph) -- se inyecta en vez de
-    asumir un formato fijo, porque gestor.obtener_no_leidos() retorna
-    items "crudos" (MailItem o dict de Graph), no Correo directamente.
-    Cada item se procesa de forma aislada: si uno falla (p.ej. un MailItem
-    COM corrupto que lanza un error al leer item.Subject), se loguea y se
-    continua con los demas -- sin esto, una excepcion en un solo correo
-    abortaria el ciclo completo (propagando hasta el try/except de main()),
-    dejando SIN clasificar a todos los demas correos no leidos de ese
-    ciclo. Como el correo problematico sigue sin leerse, el proximo ciclo
-    de polling (60s despues) volveria a intentarlo y fallar igual,
-    bloqueando la clasificacion de correo nuevo de forma indefinida.
+    `a_correo` es el conversor especifico del adaptador (_mensaje_a_correo
+    para Graph) -- se inyecta en vez de asumir un formato fijo, porque
+    gestor.obtener_no_leidos() retorna items "crudos" (dict de Graph), no
+    Correo directamente. Cada item se procesa de forma aislada: si uno
+    falla (p.ej. un mensaje con un campo inesperado que lanza un error al
+    leerlo), se loguea y se continua con los demas -- sin esto, una
+    excepcion en un solo correo abortaria el resto del lote, dejando SIN
+    clasificar a todos los demas correos no leidos de esa notificacion.
     """
     items_no_leidos = gestor.obtener_no_leidos() #Lista de items crudos (formato depende del adaptador inyectado en `gestor`)
     cantidad_marcados = 0 #Contador de cuantos se detectaron como phishing en este ciclo

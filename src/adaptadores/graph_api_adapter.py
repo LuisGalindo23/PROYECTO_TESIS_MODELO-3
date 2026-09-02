@@ -124,12 +124,10 @@ class GestorDeCorreoGraph:
 
     def obtener_no_leidos(self) -> list:
         """
-        Retorna los mensajes JSON crudos de Graph (sin convertir a Correo),
-        para tener la misma forma de contrato que GestorDeCorreoOutlookCOM
-        (que retorna MailItem crudos). La conversion a Correo la hace un
-        `a_correo` inyectado externamente (ver `_mensaje_a_correo` en este
-        modulo o `_item_a_correo` en outlook_com_adapter), igual que ya
-        ocurre para el adaptador COM en ejecutar_ciclo_de_escaneo.
+        Retorna los mensajes JSON crudos de Graph (sin convertir a Correo).
+        La conversion a Correo la hace un `a_correo` inyectado externamente
+        (ver `_mensaje_a_correo` en este modulo), pasado a
+        ejecutar_ciclo_de_escaneo.
 
         Sigue "@odata.nextLink" hasta agotar todas las paginas (via
         _listar_todas_las_paginas): sin esto, los correos no leidos mas

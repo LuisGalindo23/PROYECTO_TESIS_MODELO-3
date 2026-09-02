@@ -3,8 +3,7 @@ Azure Functions: recibe notificaciones de Microsoft Graph (correo nuevo en
 el buzon monitoreado) y renueva la suscripcion de Graph antes de que
 expire. Los triggers (@app.route, @app.timer_trigger) son envoltorios
 delgados sobre manejar_notificacion/ejecutar_renovacion, para poder
-testear la logica sin el runtime de Functions -- mismo patron que main()
-en src/monitor_outlook.py.
+testear la logica sin el runtime de Functions.
 """
 import logging  #Modulo para operaciones de logs, integrado con Application Insights por el runtime de Functions
 import os  #Para leer variables de entorno (App Settings de la Function App) y construir rutas de archivo

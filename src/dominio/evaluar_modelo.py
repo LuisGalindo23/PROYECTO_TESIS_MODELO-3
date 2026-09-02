@@ -18,9 +18,11 @@ from src.dominio.entrenar_modelo import (
     RUTA_VECTORIZADOR_DEFECTO,
 )
 from src.dominio.limpieza_dataset import limpiar_dataset
+from src.dominio.graficos_evaluacion import graficar_resultados
 
 ETIQUETA_POSITIVA = "phishing"
 RUTA_DATASET = "dataset/correo_empresa_dataset.csv"
+RUTA_GRAFICO_DEFECTO = "logs/evaluacion.png"
 
 def evaluar(
     ruta_dataset: str = RUTA_DATASET,
@@ -133,6 +135,8 @@ if __name__ == "__main__":
     print(f"Exactitud: {resultado['exactitud']:.2f}%")
     print(f"F1-Score: {resultado['f1_score']:.2f}%")
     print(f"VP={resultado['vp']}, VN={resultado['vn']}, FP={resultado['fp']}, FN={resultado['fn']}")
+    graficar_resultados(resultado, RUTA_GRAFICO_DEFECTO)
+    print(f"Grafico guardado en: {RUTA_GRAFICO_DEFECTO}")
     print() #Imprime un salto de linea
     if resultado["ejemplos_mal_clasificados"]:
         print("=== Correos mal clasificados ===")

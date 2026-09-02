@@ -305,7 +305,7 @@ def explicar_clasificacion(
     Requiere un SVM lineal binario (SVC(kernel="linear") directo, o
     envuelto en CalibratedClassifierCV -- ver _coef_del_modelo) con
     modelo.classes_ == ['benigno', 'phishing'] (mismo invariante que ya
-    asume ETIQUETA_PHISHING en monitor_outlook.py): coef_ positivo empuja
+    asume ETIQUETA_PHISHING en procesar_correo.py): coef_ positivo empuja
     hacia phishing, negativo hacia benigno.
     """
     if X is None:
