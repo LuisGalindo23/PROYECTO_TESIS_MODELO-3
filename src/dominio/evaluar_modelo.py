@@ -1,7 +1,7 @@
 """
 Escenario de prueba: mide la efectividad real del SVM sobre un dataset de
 evaluación independiente del usado en entrenamiento, se usa dataset de correos de phishing
-recolectados de la empresa, el archivo tiene el nombre "correo_empresa_dataset.csv"
+recolectados de la empresa, el archivo tiene el nombre "Dataset_evaluacion_correos.csv"
 
 """
 import pandas as pd #Módulo lectura de archivos CSV como tabla
@@ -21,8 +21,8 @@ from src.dominio.limpieza_dataset import limpiar_dataset
 from src.dominio.graficos_evaluacion import graficar_resultados
 
 ETIQUETA_POSITIVA = "phishing"
-RUTA_DATASET = "dataset/correo_empresa_dataset.csv"
-RUTA_GRAFICO_DEFECTO = "logs/evaluacion.png"
+RUTA_DATASET = "dataset/Dataset_evaluacion_correos.csv"
+RUTA_GRAFICO_DEFECTO = "detalle_indicadores/evaluacion.png"
 
 def evaluar(
     ruta_dataset: str = RUTA_DATASET,

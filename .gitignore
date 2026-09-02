@@ -2,7 +2,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 logs/*.log
-logs/*.png
+detalle_indicadores/*.png
 .superpowers/
 .venv-azure/
 local.settings.json
