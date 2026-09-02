@@ -44,12 +44,39 @@ def test_tiene_url_sospechosa_false_para_dominio_normal():
     assert tiene_url_sospechosa("Visita http://banco.com/login") is False
 
 
+def test_tiene_url_sospechosa_detecta_acortador_en_subdominio():
+    # "mirror1.bit.ly" es un subdominio del acortador conocido "bit.ly" --
+    # deberia detectarse igual que "bit.ly" o "www.bit.ly".
+    assert tiene_url_sospechosa("Click aqui: http://mirror1.bit.ly/xyz123") is True
+
+
+def test_tiene_url_sospechosa_no_lanza_excepcion_con_url_malformada():
+    # Esta URL (formato real encontrado en un dataset de terceros: corchete
+    # sin cerrar tras el esquema) hace que urlparse() lance
+    # "ValueError: Invalid IPv6 URL". No debe tumbar la evaluacion del correo.
+    url_malformada = "Revisa http://[https://www.youtube.com/paid_memberships ahora"
+    resultado = tiene_url_sospechosa(url_malformada)
+    assert resultado in (True, False)
+
+
 def test_dominio_coincide_true_cuando_remitente_y_url_son_del_mismo_dominio():
     assert dominio_coincide("alertas@banco.com", "Verifica en http://banco.com/verificar") is True
 
 
 def test_dominio_coincide_false_cuando_remitente_y_url_son_de_dominios_distintos():
     assert dominio_coincide("alertas@banco.com", "Verifica en http://banco-fake.com/verificar") is False
+
+
+def test_dominio_coincide_true_cuando_solo_difiere_el_subdominio():
+    # Remitente en un subdominio, enlace al dominio raiz sin "www." -- mismo dominio real,
+    # no deberia marcarse como mismatch solo por el subdominio.
+    assert dominio_coincide("alertas@notificaciones.banco.com", "Verifica en http://banco.com/verificar") is True
+
+
+def test_dominio_coincide_false_con_tld_compuesto_aunque_el_sufijo_coincida():
+    # atacante.com.mx y banco.com.mx comparten sufijo ".com.mx", pero son dominios
+    # registrables distintos -- no deben tratarse como el mismo dominio.
+    assert dominio_coincide("alertas@atacante.com.mx", "Verifica en http://banco.com.mx/verificar") is False
 
 
 def test_dominio_coincide_true_cuando_no_hay_urls_en_el_texto():

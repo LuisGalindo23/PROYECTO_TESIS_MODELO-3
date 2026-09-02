@@ -16,6 +16,8 @@ import ipaddress #Modulo para validar direcciones IP (IPv4/IPv6) de forma correc
 import re #Modulo de exprensiones regulares de Python
 from urllib.parse import urlparse #Modulo para descomponer una URL en sus componentes
 
+import tldextract #Para calcular el dominio raiz real (usa la Public Suffix List, entiende TLDs compuestos como .com.mx)
+
 import numpy as np #Modulo para construir un arreglo de 7 numeros
 from scipy.sparse import csr_matrix, hstack #Modulo para convertir arreglo en matriz
 #dispersa compatible
@@ -41,6 +43,11 @@ STOPWORDS_ESPANOL = [
 
 #Utilizado para la búsqueda de URLs, no considera-> espacios,<>,",'
 _PATRON_URL = re.compile(r"https?://[^\s<>\"']+")
+
+#suffix_list_urls=() fuerza a tldextract a usar SOLO el snapshot de la Public Suffix List
+#incluido en la libreria, sin intentar descargar una version actualizada por red -- mantiene
+#el pipeline determinista y sin dependencias externas en tiempo de ejecucion.
+_EXTRACTOR_DOMINIOS = tldextract.TLDExtract(suffix_list_urls=())
 
 # Acortadores de URL comúnmente abusados en campañas de phishing
 _ACORTADORES_CONOCIDOS = {
@@ -88,50 +95,81 @@ def contar_urls(texto: str) -> int:
     return len(_PATRON_URL.findall(texto or ""))
 
 
-def _dominio_de_url(url: str) -> str:
+def _dominio_raiz(url_o_dominio: str) -> str:
     """
-    Extrae el dominio (netloc) de una URL, en minúsculas y sin 'www.'.
+    Reduce una URL o un dominio (posiblemente con subdominios) a su dominio
+    registrable real -- acepta la URL completa directo, tldextract la
+    parsea internamente. "notificaciones.banco.com" y "www.banco.com" deben
+    comparar igual ("banco.com"), pero "atacante.com.mx" y "banco.com.mx"
+    deben seguir siendo distintos aunque compartan el sufijo ".com.mx". Un
+    simple "ultimas 2 etiquetas" fallaria con TLDs compuestos (los
+    reduciria a "com.mx" para ambos, un hueco de seguridad); tldextract usa
+    la Public Suffix List real para saber cuantas etiquetas son el sufijo.
+
+    A diferencia de urlparse, tldextract no lanza excepcion ante URLs mal
+    formadas (devuelve un resultado vacio/basura en vez de fallar) -- por
+    eso el try/except es solo una salvaguarda adicional, no la razon
+    principal de usarlo aqui.
     """
-    dominio = urlparse(url).netloc.lower()
-    return dominio[4:] if dominio.startswith("www.") else dominio
+    try:
+        extraido = _EXTRACTOR_DOMINIOS(url_o_dominio)
+    except Exception:
+        return ""
+    return f"{extraido.domain}.{extraido.suffix}" if extraido.suffix else extraido.domain
+
+
+def _hostname_seguro(url: str) -> str:
+    """
+    Extrae el hostname de una URL (para validar_direccion_ip), sin dejar
+    que una URL mal formada tumbe la evaluacion del correo entero. Algunas
+    URLs (ej. un "[" sin cerrar tras el esquema, visto en datasets reales
+    de terceros) hacen que urlparse lance "ValueError: Invalid IPv6 URL" en
+    vez de solo fallar en interpretar esa URL puntual.
+
+    .hostname (no url.split(":")[0]) descarta el puerto Y los corchetes de
+    un host IPv6 literal correctamente. Un split manual por ":" rompe con
+    IPv6 (ej. "http://[2001:db8::1]/x"): el primer ":" que encuentra esta
+    DENTRO de los corchetes, no separando el puerto, asi que terminaria
+    comparando "[" en vez de la IP real.
+    """
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
 
 
 def tiene_url_sospechosa(texto: str) -> bool:
     """
     Detecta si alguna URL del texto es sospechosa:
     - Usa una IP literal en vez de un dominio (típico de phishing improvisado).
-    - Usa un acortador de URLs conocido (oculta el destino real).
+    - Usa un acortador de URLs conocido (oculta el destino real), incluyendo
+      subdominios de un acortador conocido (ej. "mirror1.bit.ly").
     """
     #Realiza la busqueda de URLs en el asunto y cuerpo de correo
     for url in _PATRON_URL.findall(texto or ""): #En caso sea vacio, se reemplaza por un espacio en blanco
-        dominio = _dominio_de_url(url)
-        # .hostname (no dominio.split(":")[0]) descarta el puerto Y los
-        # corchetes de un host IPv6 literal correctamente. Un split manual
-        # por ":" rompe con IPv6 (ej. "http://[2001:db8::1]/x"): el primer
-        # ":" que encuentra esta DENTRO de los corchetes, no separando el
-        # puerto, asi que terminaria comparando "[" en vez de la IP real.
-        host = (urlparse(url).hostname or "").lower()
-        if validar_direccion_ip(host): #Validar si el dominio se trata de una IP
+        if validar_direccion_ip(_hostname_seguro(url)): #Validar si el dominio se trata de una IP
             return True
-        if dominio in _ACORTADORES_CONOCIDOS: #Validar si el dominio se trata de un acortar conocido
+        if _dominio_raiz(url) in _ACORTADORES_CONOCIDOS: #Validar si el dominio raiz es un acortador conocido
             return True
     return False
 
 
 def dominio_coincide(remitente: str, texto: str) -> bool:
     """
-    Compara el dominio del remitente con los dominios de las URLs del cuerpo.
-    Un correo legítimo normalmente enlaza a su propio dominio; el phishing
-    suele enlazar a un dominio distinto al que dice representar.
+    Compara el dominio raiz del remitente con los dominios raiz de las URLs
+    del cuerpo (ver _dominio_raiz -- ignora diferencias de subdominio, pero
+    no de TLDs compuestos). Un correo legítimo normalmente enlaza a su
+    propio dominio; el phishing suele enlazar a un dominio distinto al que
+    dice representar.
     Si no hay URLs en el texto, se considera que "coincide" (no hay señal
     de alarma que reportar).
     """
     urls = _PATRON_URL.findall(texto or "") #Lista los URLs presentes en el correo y si está vacio se reemplaza por un espacio en blanco
     if not urls:
         return True
-    dominio_remitente = (remitente or "").split("@")[-1].strip().lower() #Separa el dominio antes y despues del arroba, se utiliza el despues en minuscula
-    dominios_en_texto = {_dominio_de_url(url) for url in urls} #Dominio de los URLs listados
-    return dominio_remitente in dominios_en_texto #Busqueda del dominio remitente en los dominios de las URLs
+    dominio_remitente = _dominio_raiz((remitente or "").split("@")[-1].strip().lower()) #Dominio raiz del remitente
+    dominios_en_texto = {_dominio_raiz(url) for url in urls} #Dominio raiz de cada URL listada (tldextract parsea la URL completa)
+    return dominio_remitente in dominios_en_texto #Busqueda del dominio raiz del remitente entre los dominios raiz de las URLs
 
 
 def contar_palabras_urgencia(texto: str) -> int:
