@@ -111,7 +111,7 @@ def evaluar(
 
 
 # Features cuyo valor es 0.0/1.0 y se leen mejor como si/no que como numero.
-_FEATURES_BOOLEANAS = {"url_sospechosa", "dominio_coincide", "datos_sensibles", "saludo_generico"}
+_FEATURES_BOOLEANAS = {"url_sospechosa", "datos_sensibles", "saludo_generico"}
 
 
 def _formatear_features(features: dict) -> str:
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         print()
 
     # Listado completo por índice, para contrastar contra el etiquetado
-    # original en dataset/correos_dataset.csv.
+    # original en el CSV de evaluacion (ver RUTA_DATASET).
     for etiqueta in ("benigno", "phishing"):
         correos_categoria = [
             r for r in resultado["resultados_detallados"] if r["etiqueta_real"] == etiqueta

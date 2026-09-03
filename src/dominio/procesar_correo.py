@@ -60,19 +60,6 @@ def _formatear_analisis_natural(explicacion: dict) -> str:
             "Alguno de los enlaces usa una direccion IP o un acortador conocido "
             "(bit.ly, tinyurl, etc.), una tecnica comun para ocultar el destino real.",
         ))
-    # dominio_coincide es la unica senal "invertida" del conjunto: su
-    # estado de alarma es valor=0.0 (no coincide), y la contribucion se
-    # calcula como valor*peso -- por lo que en ese estado la contribucion
-    # es siempre exactamente 0.0, sin importar el peso real que el SVM le
-    # asigno. A diferencia de las otras 6 senales (donde valor=1.0 es la
-    # alarma y la contribucion si varia), aplicarle el mismo filtro de
-    # _EPSILON_CONTRIBUCION la volveria permanentemente inalcanzable. Por
-    # eso se muestra siempre que se detecta el mismatch, sin filtro.
-    if not valores.get("dominio_coincide", True):
-        senales_con_peso.append((
-            contribuciones.get("dominio_coincide", 0),
-            "El dominio del remitente no coincide con los enlaces del cuerpo del mensaje.",
-        ))
     if valores.get("urgencia", 0) > 0 and contribuciones.get("urgencia", 0) > _EPSILON_CONTRIBUCION:
         senales_con_peso.append((
             contribuciones["urgencia"],
