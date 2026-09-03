@@ -10,7 +10,6 @@ from sklearn.svm import SVC
 from src.dominio.features import (
     contar_urls,
     tiene_url_sospechosa,
-    dominio_coincide,
     contar_palabras_urgencia,
     proporcion_mayusculas,
     solicita_datos_sensibles,
@@ -59,30 +58,6 @@ def test_tiene_url_sospechosa_no_lanza_excepcion_con_url_malformada():
     assert resultado in (True, False)
 
 
-def test_dominio_coincide_true_cuando_remitente_y_url_son_del_mismo_dominio():
-    assert dominio_coincide("alertas@banco.com", "Verifica en http://banco.com/verificar") is True
-
-
-def test_dominio_coincide_false_cuando_remitente_y_url_son_de_dominios_distintos():
-    assert dominio_coincide("alertas@banco.com", "Verifica en http://banco-fake.com/verificar") is False
-
-
-def test_dominio_coincide_true_cuando_solo_difiere_el_subdominio():
-    # Remitente en un subdominio, enlace al dominio raiz sin "www." -- mismo dominio real,
-    # no deberia marcarse como mismatch solo por el subdominio.
-    assert dominio_coincide("alertas@notificaciones.banco.com", "Verifica en http://banco.com/verificar") is True
-
-
-def test_dominio_coincide_false_con_tld_compuesto_aunque_el_sufijo_coincida():
-    # atacante.com.mx y banco.com.mx comparten sufijo ".com.mx", pero son dominios
-    # registrables distintos -- no deben tratarse como el mismo dominio.
-    assert dominio_coincide("alertas@atacante.com.mx", "Verifica en http://banco.com.mx/verificar") is False
-
-
-def test_dominio_coincide_true_cuando_no_hay_urls_en_el_texto():
-    assert dominio_coincide("alertas@banco.com", "Este correo no tiene enlaces") is True
-
-
 def test_contar_palabras_urgencia_cuenta_las_frases_conocidas():
     texto = "Esto es URGENTE, actue ahora mismo antes de que se bloquee"
     # "urgente" y "ahora mismo" son dos frases distintas de _PALABRAS_URGENCIA
@@ -124,11 +99,10 @@ def test_extraer_features_numericas_devuelve_el_vector_en_el_orden_documentado()
         cuerpo="Estimado cliente, ingrese en http://192.168.1.1/login antes de 24 horas",
         remitente="alertas@banco.com",
     )
-    assert len(vector) == len(NOMBRES_FEATURES) == 7
-    urls, url_sospechosa, dominio_coincide_valor, urgencia, mayusculas, datos_sensibles, saludo = vector
+    assert len(vector) == len(NOMBRES_FEATURES) == 6
+    urls, url_sospechosa, urgencia, mayusculas, datos_sensibles, saludo = vector
     assert urls == 1.0
     assert url_sospechosa == 1.0  # IP literal
-    assert dominio_coincide_valor == 0.0  # banco.com (remitente) != 192.168.1.1 (url)
     assert urgencia >= 1.0  # "verifique" esta en _PALABRAS_URGENCIA
     assert datos_sensibles == 1.0  # "contraseña"
     assert saludo == 1.0  # "estimado cliente"

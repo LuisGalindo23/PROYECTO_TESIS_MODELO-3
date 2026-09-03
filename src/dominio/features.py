@@ -154,23 +154,6 @@ def tiene_url_sospechosa(texto: str) -> bool:
     return False
 
 
-def dominio_coincide(remitente: str, texto: str) -> bool:
-    """
-    Compara el dominio raiz del remitente con los dominios raiz de las URLs
-    del cuerpo (ver _dominio_raiz -- ignora diferencias de subdominio, pero
-    no de TLDs compuestos). Un correo legítimo normalmente enlaza a su
-    propio dominio; el phishing suele enlazar a un dominio distinto al que
-    dice representar.
-    Si no hay URLs en el texto, se considera que "coincide" (no hay señal
-    de alarma que reportar).
-    """
-    urls = _PATRON_URL.findall(texto or "") #Lista los URLs presentes en el correo y si está vacio se reemplaza por un espacio en blanco
-    if not urls:
-        return True
-    dominio_remitente = _dominio_raiz((remitente or "").split("@")[-1].strip().lower()) #Dominio raiz del remitente
-    dominios_en_texto = {_dominio_raiz(url) for url in urls} #Dominio raiz de cada URL listada (tldextract parsea la URL completa)
-    return dominio_remitente in dominios_en_texto #Busqueda del dominio raiz del remitente entre los dominios raiz de las URLs
-
 
 def contar_palabras_urgencia(texto: str) -> int:
     """Cuenta cuántas frases/palabras de urgencia típicas de phishing aparecen."""
@@ -211,7 +194,6 @@ def saludo_generico(texto: str) -> bool:
 NOMBRES_FEATURES = [
     "urls",
     "url_sospechosa",
-    "dominio_coincide",
     "urgencia",
     "mayusculas",
     "datos_sensibles",
@@ -222,9 +204,13 @@ NOMBRES_FEATURES = [
 def extraer_features_numericas(asunto: str, cuerpo: str, remitente: str) -> list:
     """
     Combina todas las features ingenieradas de un correo en un solo vector
-    numérico de longitud fija (7), en un orden estable y documentado:
-    [urls, url_sospechosa, dominio_coincide, urgencia, mayusculas,
-     datos_sensibles, saludo_generico]
+    numérico de longitud fija (6), en un orden estable y documentado:
+    [urls, url_sospechosa, urgencia, mayusculas, datos_sensibles, saludo_generico]
+
+    `remitente` se mantiene en la firma por compatibilidad con los
+    llamantes existentes (construir_matriz_features, explicar_clasificacion),
+    aunque ninguna feature lo use hoy -- dominio_coincide (la unica que lo
+    usaba) se removio como prueba, ver commit.
     """
     texto_completo = f"{asunto}\n{cuerpo}"
 
@@ -232,7 +218,6 @@ def extraer_features_numericas(asunto: str, cuerpo: str, remitente: str) -> list
     return [
         float(contar_urls(texto_completo)),
         float(tiene_url_sospechosa(texto_completo)),
-        float(dominio_coincide(remitente, texto_completo)),
         float(contar_palabras_urgencia(texto_completo)),
         float(proporcion_mayusculas(asunto)),
         float(solicita_datos_sensibles(texto_completo)), 

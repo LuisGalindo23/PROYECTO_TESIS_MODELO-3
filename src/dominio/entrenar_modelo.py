@@ -8,7 +8,6 @@ La evaluación del modelo (src/dominio/evaluar_modelo.py) usa un dataset
 independiente, no un split de este archivo.
 """
 
-import pandas as pd #Módulo lectura de archivos CSV como tabla
 import joblib #Módulo para guardar en disco el modelo y vectorizador
 
 from sklearn.svm import SVC #Módulo de SVM, específicamente la clase SVC (Support Vector Classification)
@@ -17,8 +16,9 @@ from sklearn.calibration import CalibratedClassifierCV #Reemplaza a SVC(probabil
 from src.dominio.features import crear_vectorizador_tfidf, construir_matriz_features #Se importan estas clases, ya que por arquitectura el modelo no tiene conocimiento de la existencia de Outlook
 from src.dominio.limpieza_dataset import limpiar_dataset
 from src.dominio.validacion_kfold import validar_con_kfold
+from src.dominio.lectura_csv import leer_csv_dataset
 
-RUTA_CSV_DEFECTO = "dataset/spaphish_adaptado.csv"
+RUTA_CSV_DEFECTO = "dataset/Dataset_entrenamiento_correos.csv"
 RUTA_MODELO_DEFECTO = "modelo/svm_phishing.pkl"
 RUTA_VECTORIZADOR_DEFECTO = "modelo/vectorizador_tfidf.pkl"
 
@@ -31,7 +31,7 @@ def entrenar_y_guardar(
     ruta_modelo: str = RUTA_MODELO_DEFECTO,
     ruta_vectorizador: str = RUTA_VECTORIZADOR_DEFECTO,
 ) -> dict: #Retorna un diccionario, que guarda pares clave-valor = {"clave": valor}
-    ds_correos = pd.read_csv(ruta_csv) #Lectura del dataset
+    ds_correos = leer_csv_dataset(ruta_csv) #Lectura del dataset (tolera el formato cp1252/";" que exporta Excel en regional espanol)
     ds_correos = limpiar_dataset(ds_correos) #Nulos, espacios, etiquetas y duplicados exactos
 
     vectorizador = crear_vectorizador_tfidf()

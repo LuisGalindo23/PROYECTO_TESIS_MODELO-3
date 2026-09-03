@@ -4,7 +4,6 @@ evaluación independiente del usado en entrenamiento, se usa dataset de correos 
 recolectados de la empresa, el archivo tiene el nombre "Dataset_evaluacion_correos.csv"
 
 """
-import pandas as pd #Módulo lectura de archivos CSV como tabla
 import joblib #Módulo para guardar en disco el modelo y vectorizador
 from sklearn.metrics import confusion_matrix #Matriz de confusion: base de los indicadores VP%/FP%
 
@@ -19,17 +18,18 @@ from src.dominio.entrenar_modelo import (
 )
 from src.dominio.limpieza_dataset import limpiar_dataset
 from src.dominio.graficos_evaluacion import graficar_resultados
+from src.dominio.lectura_csv import leer_csv_dataset
 
 ETIQUETA_POSITIVA = "phishing"
 RUTA_DATASET = "dataset/Dataset_evaluacion_correos.csv"
-RUTA_GRAFICO_DEFECTO = "detalle_indicadores/evaluacion.png"
+RUTA_GRAFICO_DEFECTO = "grafica_indicadores/evaluacion.png"
 
 def evaluar(
     ruta_dataset: str = RUTA_DATASET,
     ruta_modelo: str = RUTA_MODELO_DEFECTO,
     ruta_vectorizador: str = RUTA_VECTORIZADOR_DEFECTO,
 ) -> dict:
-    df_eval = pd.read_csv(ruta_dataset) #Lee el dataset independiente de evaluacion
+    df_eval = leer_csv_dataset(ruta_dataset) #Lee el dataset independiente de evaluacion (tolera el formato cp1252/";" que exporta Excel en regional espanol)
     df_eval = limpiar_dataset(df_eval) #Misma limpieza que en entrenamiento (nulos, espacios, etiquetas, duplicados)
     modelo = joblib.load(ruta_modelo) #Carga el modelo
     vectorizador = joblib.load(ruta_vectorizador) #Carga el vectorizador
