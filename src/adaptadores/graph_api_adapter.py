@@ -138,9 +138,21 @@ class GestorDeCorreoGraph:
         return _listar_todas_las_paginas(url, self._headers, params)
 
     def obtener_mensaje(self, mensaje_id: str) -> dict:
-        """Trae el contenido completo de un mensaje por su id (las notificaciones de Graph solo traen el id, no el contenido)."""
+        """
+        Trae el contenido completo de un mensaje por su id (las notificaciones de Graph solo traen el id, no el contenido).
+
+        El header Prefer le pide a Graph el cuerpo en texto plano en vez de
+        HTML (su formato por defecto): sin esto, "body.content" trae
+        etiquetas HTML y entidades (ej. "contrase&ntilde;a" en vez de
+        "contraseña"), lo que rompe la tokenizacion del TF-IDF -- el
+        vocabulario aprendido en entrenamiento tiene los acentos reales,
+        nunca las entidades HTML, asi que la señal se pierde casi por
+        completo en cualquier correo real (compuesto como HTML por
+        Outlook/la mayoria de clientes de correo).
+        """
         url = f"{GRAPH_BASE}/users/{self._buzon}/messages/{mensaje_id}"
-        respuesta = requests.get(url, headers=self._headers, timeout=_TIMEOUT_SEGUNDOS)
+        headers = {**self._headers, "Prefer": 'outlook.body-content-type="text"'}
+        respuesta = requests.get(url, headers=headers, timeout=_TIMEOUT_SEGUNDOS)
         respuesta.raise_for_status()
         return respuesta.json()
 
