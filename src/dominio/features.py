@@ -26,12 +26,15 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 #(frecuencia de término × frecuencia inversa de documento).
 import pandas as pd  # Modulo para construir el DataFrame de un unico correo
 
-# Stopwords en español para el TF-IDF. Lista completa del corpus "stopwords"
-# de NLTK (nltk.corpus.stopwords.words("spanish"), 313 palabras) en vez de
-# una lista curada a mano -- una lista manual corre el riesgo de dejar fuera
+# Stopwords en español para el TF-IDF. Base: corpus "stopwords" de NLTK
+# (nltk.corpus.stopwords.words("spanish"), 313 palabras) en vez de una lista
+# curada a mano -- una lista manual corre el riesgo de dejar fuera
 # conjugaciones comunes (p.ej. "ha" faltaba antes) que terminan colandose
 # como features TF-IDF y correlacionando de forma espuria con el estilo de
 # redaccion del dataset de entrenamiento en vez de con contenido real.
+# Se agrego "sido" (participio de "ser", ausente en el corpus de NLTK) tras
+# detectar el mismo problema: aparece en 17.93% de los correos de phishing
+# de entrenamiento vs 7.89% de los benignos.
 
 STOPWORDS_ESPANOL = [
     "a", "al", "algo", "algunas", "algunos", "ante", "antes", "como",
@@ -61,7 +64,7 @@ STOPWORDS_ESPANOL = [
     "poco", "por", "porque", "que", "quien", "quienes", "qué", "se",
     "sea", "seamos", "sean", "seas", "sentid", "sentida", "sentidas", "sentido",
     "sentidos", "seremos", "será", "serán", "serás", "seré", "seréis", "sería",
-    "seríais", "seríamos", "serían", "serías", "seáis", "siente", "sin", "sintiendo",
+    "seríais", "seríamos", "serían", "serías", "seáis", "sido", "siente", "sin", "sintiendo",
     "sobre", "sois", "somos", "son", "soy", "su", "sus", "suya",
     "suyas", "suyo", "suyos", "sí", "también", "tanto", "te", "tendremos",
     "tendrá", "tendrán", "tendrás", "tendré", "tendréis", "tendría", "tendríais", "tendríamos",
