@@ -1,9 +1,9 @@
 """
-Escenario de prueba: mide la efectividad real del SVM sobre un dataset de
-evaluación independiente del usado en entrenamiento, se usa dataset de correos de phishing
-recolectados de la empresa, el archivo tiene el nombre "Dataset_evaluacion_correos.csv"
+Escenario de prueba: mide la efectividad real del SVM sobre el dataset de evaluación "Dataset_evaluacion_correos",
+se usa el dataset de correos de phishing recolectados de la empresa.
 
 """
+
 import joblib #Módulo para guardar en disco el modelo y vectorizador
 from sklearn.metrics import confusion_matrix #Matriz de confusion: base de los indicadores VP%/FP%
 
@@ -29,26 +29,23 @@ def evaluar(
     ruta_modelo: str = RUTA_MODELO_DEFECTO,
     ruta_vectorizador: str = RUTA_VECTORIZADOR_DEFECTO,
 ) -> dict:
-    df_eval = leer_csv_dataset(ruta_dataset) #Lee el dataset independiente de evaluacion (tolera el formato cp1252/";" que exporta Excel en regional espanol)
-    df_eval = limpiar_dataset(df_eval) #Misma limpieza que en entrenamiento (nulos, espacios, etiquetas, duplicados)
-    modelo = joblib.load(ruta_modelo) #Carga el modelo
+    df_eval = leer_csv_dataset(ruta_dataset) ##Lectura del dataset.
+    df_eval = limpiar_dataset(df_eval) #Nulos, espacios, etiquetas y duplicados exactos.
+    modelo = joblib.load(ruta_modelo) #Carga el modelo SVM
     vectorizador = joblib.load(ruta_vectorizador) #Carga el vectorizador
 
-    # ajustar=False: reutiliza el vectorizador ya ajustado en entrenamiento,
-    # nunca se debe re-ajustar sobre datos de prueba (fugaría información).
-    X_eval = construir_matriz_features(df_eval, vectorizador, ajustar=False) #Establece el vectorizador entrenado
+    # ajustar=False: reutiliza el vectorizador ya entrenado,
+    X_eval = construir_matriz_features(df_eval, vectorizador, ajustar=False) #Construye la matriz de evaluación
     y_real = df_eval["etiqueta"] #Etiquetas de Benigno y Phishing
-    y_predicho = modelo.predict(X_eval) #Evalua los correos del dataset de evaluacion
-    # probability=True en el SVM (ver entrenar_modelo.py) habilita esta
-    # estimación de probabilidad por clase, columnas en el orden de modelo.classes_.
-    y_probabilidades = modelo.predict_proba(X_eval)
-    remitentes = df_eval["remitente"].fillna("") #Igual que en construir_matriz_features: NaN -> string vacio
+    y_predicho = modelo.predict(X_eval) #Evalua los correos del dataset
+    y_probabilidades = modelo.predict_proba(X_eval) #Establece la probabilidad de clasificación del correo 
+    remitentes = df_eval["remitente"].fillna("")
 
     ejemplos_mal_clasificados = []
-    # Índice original del correo en el dataset (df_eval.index conserva el
-    # índice del CSV de evaluacion, útil para verificar el etiquetado).
     resultados_detallados = []
-    for idx, (real, predicho) in enumerate(zip(y_real, y_predicho)):
+
+    #Se guardan en listas los correos bien o mal clasificados
+    for idx, (real, predicho) in enumerate(zip(y_real, y_predicho)): 
         fila = df_eval.iloc[idx]
         vector_features = extraer_features_numericas(fila["asunto"], fila["cuerpo"], remitentes.iloc[idx])
         resultados_detallados.append({

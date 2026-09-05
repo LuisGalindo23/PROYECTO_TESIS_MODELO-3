@@ -1,9 +1,7 @@
 """
-Limpieza de un DataFrame de correos (columnas: asunto, cuerpo, remitente,
-etiqueta) antes de construir features. Se ejecuta antes de
-construir_matriz_features, tanto en entrenamiento (entrenar_modelo.py) como
-en evaluacion (evaluar_modelo.py), para que ambos apliquen exactamente la
-misma limpieza al leer sus respectivos CSV.
+Limpieza de un DataFrame de correos (columnas: asunto, cuerpo, remitente, etiqueta) antes de construir features.
+Se ejecuta antes de construir_matriz_features, tanto en entrenamiento (entrenar_modelo.py) como en evaluacion (evaluar_modelo.py),
+para que ambos apliquen exactamente la misma limpieza al leer sus respectivos CSV.
 """
 import pandas as pd  #Modulo de lectura/manipulacion del CSV como tabla (DataFrame)
 
@@ -35,8 +33,7 @@ def limpiar_dataset(df: pd.DataFrame) -> pd.DataFrame:
             f"La columna 'etiqueta' tiene valores fuera de {ETIQUETAS_VALIDAS}: {etiquetas_invalidas}"
         )
 
-    # Se conserva el indice original (no reset_index) para que, en el
-    # dataset de evaluacion, evaluar_modelo.py pueda seguir reportando el
-    # indice de cada correo tal como aparece en su CSV de origen.
+    # Se conserva el indice original (no reset_index) para que, en el dataset de evaluacion, evaluar_modelo.py pueda seguir
+    # reportando el indice de cada correo tal como aparece en su CSV de origen.
     df = df.drop_duplicates(subset=COLUMNAS_DE_TEXTO, keep="first")  #Mismo asunto+cuerpo+remitente repetido -> se conserva solo la primera fila
     return df

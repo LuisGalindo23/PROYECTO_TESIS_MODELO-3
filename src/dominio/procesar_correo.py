@@ -1,25 +1,17 @@
 """
-Nucleo de dominio: clasifica un Correo ya normalizado (ver
-src/dominio/correo.py) con el SVM entrenado y, si es phishing, delega
-marcar/mover al puerto GestorDeCorreoPort y dispara la notificacion
-inyectada (o ninguna, si se pasa None). No depende de ningun adaptador
-concreto -- al contrario, el adaptador (src/adaptadores/graph_api_adapter.py)
-importa de aqui las constantes de marcado/notificacion compartidas, en
-particular PREFIJO_ALERTA_NOTIFICACION, la unica salvaguarda contra un
-bucle infinito de auto-notificacion.
+Nucleo de dominio: clasifica un Correo ya normalizado (ver src/dominio/correo.py) con el SVM entrenado y, si es phishing, delega
+marcar/mover al puerto GestorDeCorreoPort y dispara la notificacion (o ninguna, si se pasa None).
 """
 import logging  #Modulo para operaciones de logs
-from datetime import datetime, timezone  #Para medir el tiempo medio de deteccion contra correo.hora_recepcion
+from datetime import datetime, timezone  #Para medir el tiempo medio de deteccion contra hora de recepcion
 
-import pandas as pd  #Modulo para construir el DataFrame de un unico correo, formato que espera construir_matriz_features
+import pandas as pd  #Modulo de lectura/manipulacion del CSV como tabla (DataFrame)
 
 from src.dominio.correo import Correo
 from src.dominio.features import construir_matriz_features, explicar_clasificacion
 from src.puertos.gestor_correo_port import GestorDeCorreoPort
 
-ETIQUETA_PHISHING = "phishing"  #Etiqueta que usa el SVM para la clase positiva (debe coincidir con el dataset de entrenamiento)
-#Las siguientes 4 constantes son compartidas por ambos adaptadores (COM y Graph); viven aqui, no duplicadas en cada uno,
-#para que el guard anti-bucle de mas abajo (que depende de PREFIJO_ALERTA_NOTIFICACION) no pueda desincronizarse entre ellos
+ETIQUETA_PHISHING = "phishing"
 NOMBRE_CARPETA_PHISHING = "Phishing Detectado"
 CATEGORIA_PHISHING = "Posible Phishing"
 PREFIJO_ASUNTO = "[PHISHING] "
@@ -32,25 +24,12 @@ _EPSILON_CONTRIBUCION = 0.005  # Contribuciones por debajo de esto se consideran
 
 def _formatear_analisis_natural(explicacion: dict) -> str:
     """
-    Traduce el resultado de explicar_clasificacion a una lista de senales en
-    lenguaje natural, para el cuerpo del correo de notificacion (dirigido a
-    alguien no tecnico). Solo se incluye una senal si su contribucion fue
-    positiva (empujo hacia "phishing"). Las senales se ordenan de mayor a
-    menor contribucion.
-
-    Las frases evitan citar textualmente las palabras que busca el propio
-    clasificador (_PALABRAS_URGENCIA, _PATRONES_DATOS_SENSIBLES,
-    _SALUDOS_GENERICOS en features.py), para que el correo de notificacion
-    no se autoclasifique como phishing.
+    Traduce el resultado de explicar_clasificacion a una lista de senales en lenguaje natural, para el cuerpo del correo de notificacion.
+    Solo se incluye una senal si su contribucion fue positiva (empujo hacia "phishing").
     """
     valores = {nombre: valor for nombre, valor, _contribucion in explicacion["features_ingenieradas"]}
     contribuciones = {nombre: contribucion for nombre, _valor, contribucion in explicacion["features_ingenieradas"]}
 
-    # Se usa .get() con valores por defecto ("sin senal") en vez de indexado
-    # directo: explicacion["features_ingenieradas"] puede venir vacio (p.ej.
-    # en tests que mockean explicar_clasificacion), y un indexado directo
-    # lanzaria KeyError -- que procesar_correo atraparia en su try/except
-    # generico, dejando de enviar la notificacion sin ningun aviso claro.
     senales_con_peso = []
     if valores.get("urls", 0) > 0 and contribuciones.get("urls", 0) > _EPSILON_CONTRIBUCION:
         senales_con_peso.append((contribuciones["urls"], "Contiene enlaces (URLs) en el mensaje."))
@@ -121,10 +100,8 @@ def _formatear_notificacion(probabilidad: float, remitente: str, asunto: str, ex
 
 def _formatear_tiempo_medio_deteccion(hora_recepcion) -> str:
     """
-    Indicador "tiempo medio de deteccion": lapso entre que el correo llego
-    a la bandeja de entrada (correo.hora_recepcion, provisto por el
-    adaptador de origen) y que la notificacion de phishing se envio con
-    exito. Retorna "N/A" si no se conoce la hora de recepcion.
+    Indicador "tiempo medio de deteccion": lapso entre que el correo llego a la bandeja de entrada (correo.hora_recepcion)
+    y que la notificacion de phishing se envió con exito. Retorna "N/A" si no se conoce la hora de recepcion.
     """
     if hora_recepcion is None:
         return "N/A"
@@ -142,30 +119,9 @@ def procesar_correo(
     correo_destino_notificacion: str,
 ) -> bool:
     """
-    Clasifica un unico Correo y, si es phishing, lo marca y mueve a traves
-    de `gestor` (GestorDeCorreoPort), y notifica via `enviar_notificacion`
-    -- pasar None desactiva el envio de notificaciones. Ambos colaboradores
-    son inyectados para que esta funcion no dependa del adaptador de origen
-    concreto (hoy, Microsoft Graph). Retorna True si fue clasificado como
-    phishing.
+    Clasifica un unico Correo y, si es phishing, lo marca y mueve a traves de `gestor` (GestorDeCorreoPort), y notifica via `enviar_notificacion`
     """
-    # Guard anti-bucle: si esta funcion detecta como phishing su propia
-    # alerta (porque correo_destino_notificacion es el mismo buzon
-    # monitoreado, "auto-notificacion"), notificaria de nuevo, generando un
-    # bucle infinito. Se exige que coincidan DOS cosas -- el prefijo Y que
-    # el remitente sea exactamente el destino de notificacion -- porque
-    # confiar solo en el asunto (dato que cualquiera que nos envie un
-    # correo controla) permitiria que un atacante evada la clasificacion
-    # entera con solo escribir "[ALERTA PHISHING] ..." como asunto.
-    #
-    # Importante: esto NO es una garantia criptografica. El remitente
-    # ("From") de un correo se puede falsificar a nivel de protocolo SMTP;
-    # lo que en la practica bloquea a un atacante es la politica anti-spoof
-    # del propio servidor de correo (SPF/DKIM/DMARC en Exchange/M365), no
-    # este chequeo. Este segundo chequeo sube el costo del bypass (ya no
-    # basta con escribir un asunto, hay que lograr que el remitente pase la
-    # verificacion del servidor) sin afectar el caso legitimo, pero no lo
-    # vuelve imposible.
+    
     destino_normalizado = (correo_destino_notificacion or "").strip().lower()
     if (
         destino_normalizado
@@ -178,25 +134,19 @@ def procesar_correo(
         "cuerpo": correo.cuerpo,
         "remitente": correo.remitente,
     }])
-    # ajustar=False: el vectorizador ya fue ajustado (fit) en entrenamiento;
-    # aqui solo se reutiliza para transformar el correo nuevo a ese mismo
-    # espacio vectorial -- nunca se debe re-ajustar sobre datos en produccion.
+
+    # Se reutiliza para transformar el correo nuevo a ese mismo espacio vectorial.
     X = construir_matriz_features(df_correo, vectorizador, ajustar=False)
     prediccion = modelo.predict(X)[0] #Clasifica el correo; [0] extrae el unico resultado (la matriz X tiene una sola fila)
     probabilidad = modelo.predict_proba(X)[0][list(modelo.classes_).index(ETIQUETA_PHISHING)] #Probabilidad especificamente de la clase "phishing"
-    if prediccion == ETIQUETA_PHISHING: #Si el correo se clasifico como phishing
-        # Se calcula la explicacion ANTES de marcar/mover el correo, reusando
-        # el mismo texto ya usado para clasificar (mismo motivo que en el
-        # comentario de logger.info mas abajo: evitar depender de un
-        # "item"/estado que el marcado/movido pueda invalidar despues).
-        # Se pasa X=X (ya calculado dos lineas arriba) para que
-        # explicar_clasificacion no vuelva a construir la misma matriz de
-        # features (TF-IDF + 7 ingenieradas) por segunda vez.
+    if prediccion == ETIQUETA_PHISHING:
+        # Si el correo se clasifico como phishing, se calcula la explicacion ANTES de marcar/mover el correo, reusando el mismo texto, ya usado para clasificar.
+     
         explicacion = explicar_clasificacion(
             modelo, vectorizador, correo.asunto, correo.cuerpo, correo.remitente, X=X,
         )
         tiempo_medio_deteccion = "N/A" #Se sobreescribe solo si la notificacion se envia con exito
-        if enviar_notificacion is not None: #None significa notificaciones desactivadas (ver docstring de esta funcion)
+        if enviar_notificacion is not None: #None significa notificaciones desactivadas.
             try:
                 cuerpo_notificacion = _formatear_notificacion(
                     probabilidad, correo.remitente, correo.asunto, explicacion,
@@ -204,15 +154,12 @@ def procesar_correo(
                 enviar_notificacion(correo.item, correo.asunto, cuerpo_notificacion, correo_destino_notificacion)
                 tiempo_medio_deteccion = _formatear_tiempo_medio_deteccion(correo.hora_recepcion)
             except Exception:
-                # Un fallo al notificar (p.ej. Graph/Outlook caido) no debe
-                # impedir que el correo igual se marque y mueva -- lo unico
-                # que se pierde es la alerta, no la deteccion en si.
+                # Un fallo al notificar no debe impedir que el correo igual se marque y mueva, lo unico que se pierde es la alerta,
+                # no la deteccion en si.
                 logger.exception("Error al enviar la notificacion de phishing")
         gestor.marcar_como_phishing(correo.item, probabilidad)
         gestor.mover_a_carpeta(correo.item, carpeta_destino)
-        # Se loguea el asunto original (no el mutado con prefijo "[PHISHING] "):
-        # Correo es inmutable, a diferencia del item COM que antes se releia
-        # despues de marcar/mover.
+        # Se registra en log el asunto original.
         logger.info(
             "PHISHING detectado (prob=%.2f) - remitente=%s - asunto=%s - tiempo_medio_deteccion=%s",
             probabilidad, correo.remitente, correo.asunto, tiempo_medio_deteccion,
@@ -236,18 +183,12 @@ def ejecutar_ciclo_de_escaneo(
     correo_destino_notificacion: str,
 ) -> int:
     """
-    Recorre los correos no leidos (via gestor.obtener_no_leidos) y clasifica
-    cada uno con procesar_correo. Retorna la cantidad marcada como phishing.
-    `a_correo` es el conversor especifico del adaptador (_mensaje_a_correo
-    para Graph) -- se inyecta en vez de asumir un formato fijo, porque
-    gestor.obtener_no_leidos() retorna items "crudos" (dict de Graph), no
-    Correo directamente. Cada item se procesa de forma aislada: si uno
-    falla (p.ej. un mensaje con un campo inesperado que lanza un error al
-    leerlo), se loguea y se continua con los demas -- sin esto, una
-    excepcion en un solo correo abortaria el resto del lote, dejando SIN
-    clasificar a todos los demas correos no leidos de esa notificacion.
+    Recorre los correos no leidos (via gestor.obtener_no_leidos) y clasifica cada uno con procesar_correo. Retorna la cantidad marcada como phishing.
+    `a_correo` es el conversor especifico del adaptador, se inyecta en vez de asumir un formato fijo, porque gestor.obtener_no_leidos() retorna items "crudos" (dict de Graph),
+    no Correo directamente. Cada item se procesa de forma aislada.
     """
-    items_no_leidos = gestor.obtener_no_leidos() #Lista de items crudos (formato depende del adaptador inyectado en `gestor`)
+
+    items_no_leidos = gestor.obtener_no_leidos() #Lista de items crudos.
     cantidad_marcados = 0 #Contador de cuantos se detectaron como phishing en este ciclo
     for item in items_no_leidos:
         try:

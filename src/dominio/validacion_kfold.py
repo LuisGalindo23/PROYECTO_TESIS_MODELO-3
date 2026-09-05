@@ -1,15 +1,10 @@
 """
-Validacion cruzada (k-fold) del SVM sobre el propio dataset de
-entrenamiento: mide que tan bien generaliza el modelo dentro de su misma
-distribucion de datos, a diferencia de evaluar_modelo.py (que mide contra
-un dataset de origen distinto). Se usa como indicador honesto al final de
-entrenar_y_guardar (ver entrenar_modelo.py) -- reemplaza a la exactitud
-sobre el propio set de entrenamiento, que no dice nada sobre generalizacion
-(un SVM con miles de columnas TF-IDF sobre ~1000 filas tiende a memorizar).
+Validacion cruzada (k-fold) del SVM sobre el propio dataset de entrenamiento: mide que tan bien generaliza el modelo dentro de su misma
+distribucion de datos, a diferencia de evaluar_modelo.py. Se usa como indicador honesto al final de entrenar_y_guardar (ver entrenar_modelo.py)
 """
 import numpy as np
 from sklearn.metrics import f1_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold #Módulo necesario para la partición del dataset en 5 agrupaciones con la misma proporción de Phishing/Benigno
 from sklearn.svm import SVC
 
 from src.dominio.features import crear_vectorizador_tfidf, construir_matriz_features
@@ -19,17 +14,12 @@ ETIQUETA_POSITIVA = "phishing"
 
 def validar_con_kfold(df, n_splits: int = 5, semilla: int = 42) -> dict:
     """
-    Entrena y evalua un SVC(kernel="linear") en n_splits particiones
-    estratificadas de `df` (columnas asunto/cuerpo/remitente/etiqueta, ya
-    limpio -- ver limpiar_dataset). En cada particion se ajusta un
-    vectorizador TF-IDF nuevo solo con el fold de entrenamiento (igual
-    invariante que construir_matriz_features en el resto del proyecto: el
-    fold de validacion nunca participa del ajuste), para no filtrar
+    Entrena y evalua un SVC en n_splits particiones estratificadas de `df`(dataFrame, CSV) (columnas asunto/cuerpo/remitente/etiqueta, ya
+    limpio). En cada particion se ajusta un vectorizador TF-IDF nuevo solo con el fold de entrenamiento (igual invariante que
+    construir_matriz_features en el resto del proyecto: el fold de validacion nunca participa del ajuste), para no filtrar
     informacion del fold de validacion hacia el de entrenamiento.
-
-    No usa CalibratedClassifierCV (ver entrenar_modelo.py): esta validacion
-    solo necesita predict() para calcular F1, no probabilidades.
     """
+
     particionador = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=semilla)
     f1_por_fold = []
 

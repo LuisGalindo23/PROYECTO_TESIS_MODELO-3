@@ -1,13 +1,11 @@
 """
-Genera un grafico estatico (PNG) con los indicadores que devuelve
-evaluar() (src/dominio/evaluar_modelo.py): matriz de confusion y barras de
-metricas. Es una herramienta de uso local -- evaluar_modelo.py no corre en
-Azure, asi que no hace falta un dashboard servido; una imagen alcanza.
+Genera un grafico estatico (PNG) con los indicadores que devuelve evaluar()
 """
+
 import matplotlib
-matplotlib.use("Agg")  #Backend sin interfaz grafica: necesario para generar el PNG sin una pantalla disponible
+matplotlib.use("Agg")  #Backend sin interfaz grafica: necesario para generar el PNG.
 import matplotlib.pyplot as plt
-import numpy as np
+import numpy as np #Módulo necesario para la construcción de la matriz de confusión
 
 
 def graficar_resultados(resultado: dict, ruta_salida: str) -> None:

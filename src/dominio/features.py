@@ -1,19 +1,16 @@
 """
-Extracción de características (features) de un correo electrónico
-para alimentar al clasificador SVM de phishing.
+Extracción de características (features) de un correo electrónico para alimentar al clasificador SVM de phishing.
 
 Se combinan dos tipos de features:
 1. Texto: matriz TF-IDF sobre "asunto + cuerpo".
-2. Ingenieradas: señales típicas de phishing (URLs sospechosas, urgencia,
-   solicitud de datos sensibles, etc.).
+2. Ingenieradas: señales típicas de phishing (URLs sospechosas, urgencia, solicitud de datos sensibles, etc.).
 
 Ambas se concatenan en una sola matriz dispersa (scipy.sparse.hstack)
 antes de entrenar o predecir con el SVM.
-
 """
 
 import ipaddress #Modulo para validar direcciones IP (IPv4/IPv6) de forma correcta
-import re #Modulo de exprensiones regulares de Python
+import re #Modulo para declarar exprensiones regulares de Python
 from urllib.parse import urlparse #Modulo para descomponer una URL en sus componentes
 
 import tldextract #Para calcular el dominio raiz real (usa la Public Suffix List, entiende TLDs compuestos como .com.mx)
@@ -26,15 +23,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 #(frecuencia de término × frecuencia inversa de documento).
 import pandas as pd  # Modulo para construir el DataFrame de un unico correo
 
-# Stopwords en español para el TF-IDF. Base: corpus "stopwords" de NLTK
-# (nltk.corpus.stopwords.words("spanish"), 313 palabras) en vez de una lista
-# curada a mano -- una lista manual corre el riesgo de dejar fuera
-# conjugaciones comunes (p.ej. "ha" faltaba antes) que terminan colandose
-# como features TF-IDF y correlacionando de forma espuria con el estilo de
-# redaccion del dataset de entrenamiento en vez de con contenido real.
-# Se agrego "sido" (participio de "ser", ausente en el corpus de NLTK) tras
-# detectar el mismo problema: aparece en 17.93% de los correos de phishing
-# de entrenamiento vs 7.89% de los benignos.
+# Stopwords en español para el TF-IDF. Base "stopwords" de NLTK (biblioteca de código abierto en Python diseñada para el procesamiento del lenguaje natural).
+# Palabras/términos muy comunes en un idioma que no aportan un significado relevante.
 
 STOPWORDS_ESPANOL = [
     "a", "al", "algo", "algunas", "algunos", "ante", "antes", "como",
@@ -82,9 +72,7 @@ STOPWORDS_ESPANOL = [
 #Utilizado para la búsqueda de URLs, no considera-> espacios,<>,",'
 _PATRON_URL = re.compile(r"https?://[^\s<>\"']+")
 
-#suffix_list_urls=() fuerza a tldextract a usar SOLO el snapshot de la Public Suffix List
-#incluido en la libreria, sin intentar descargar una version actualizada por red -- mantiene
-#el pipeline determinista y sin dependencias externas en tiempo de ejecucion.
+# Utilizado para extraer dominios de las URLs
 _EXTRACTOR_DOMINIOS = tldextract.TLDExtract(suffix_list_urls=())
 
 # Acortadores de URL comúnmente abusados en campañas de phishing
@@ -95,9 +83,8 @@ _ACORTADORES_CONOCIDOS = {
 #Validar si el domino se trata de una IPv4 o IPv6
 def validar_direccion_ip(host: str) -> bool:
     """
-    Indica si `host` es una dirección IP literal (IPv4 o IPv6), en vez de
-    un nombre de dominio. A diferencia de una regex de dígitos, valida
-    rangos reales (ej. rechaza "999.999.999.999") y cubre IPv6.
+    Indica si el dominio de la URL es una dirección IP literal (IPv4 o IPv6), en vez de un nombre de dominio.
+    A diferencia de una regex de dígitos, valida rangos reales (ej. rechaza "999.999.999.999") y cubre IPv6.
     """
     try:
         ipaddress.ip_address(host)
@@ -135,20 +122,9 @@ def contar_urls(texto: str) -> int:
 
 def _dominio_raiz(url_o_dominio: str) -> str:
     """
-    Reduce una URL o un dominio (posiblemente con subdominios) a su dominio
-    registrable real -- acepta la URL completa directo, tldextract la
-    parsea internamente. "notificaciones.banco.com" y "www.banco.com" deben
-    comparar igual ("banco.com"), pero "atacante.com.mx" y "banco.com.mx"
-    deben seguir siendo distintos aunque compartan el sufijo ".com.mx". Un
-    simple "ultimas 2 etiquetas" fallaria con TLDs compuestos (los
-    reduciria a "com.mx" para ambos, un hueco de seguridad); tldextract usa
-    la Public Suffix List real para saber cuantas etiquetas son el sufijo.
-
-    A diferencia de urlparse, tldextract no lanza excepcion ante URLs mal
-    formadas (devuelve un resultado vacio/basura en vez de fallar) -- por
-    eso el try/except es solo una salvaguarda adicional, no la razon
-    principal de usarlo aqui.
+    Reduce una URL o un dominio a su dominio raiz.
     """
+
     try:
         extraido = _EXTRACTOR_DOMINIOS(url_o_dominio)
     except Exception:
@@ -158,17 +134,7 @@ def _dominio_raiz(url_o_dominio: str) -> str:
 
 def _hostname_seguro(url: str) -> str:
     """
-    Extrae el hostname de una URL (para validar_direccion_ip), sin dejar
-    que una URL mal formada tumbe la evaluacion del correo entero. Algunas
-    URLs (ej. un "[" sin cerrar tras el esquema, visto en datasets reales
-    de terceros) hacen que urlparse lance "ValueError: Invalid IPv6 URL" en
-    vez de solo fallar en interpretar esa URL puntual.
-
-    .hostname (no url.split(":")[0]) descarta el puerto Y los corchetes de
-    un host IPv6 literal correctamente. Un split manual por ":" rompe con
-    IPv6 (ej. "http://[2001:db8::1]/x"): el primer ":" que encuentra esta
-    DENTRO de los corchetes, no separando el puerto, asi que terminaria
-    comparando "[" en vez de la IP real.
+    Extrae el dominio de una URL (para validar_direccion_ip), sin dejar que una URL mal formada tumbe la evaluacion del correo entero.
     """
     try:
         return (urlparse(url).hostname or "").lower()
@@ -180,8 +146,7 @@ def tiene_url_sospechosa(texto: str) -> bool:
     """
     Detecta si alguna URL del texto es sospechosa:
     - Usa una IP literal en vez de un dominio (típico de phishing improvisado).
-    - Usa un acortador de URLs conocido (oculta el destino real), incluyendo
-      subdominios de un acortador conocido (ej. "mirror1.bit.ly").
+    - Usa un acortador de URLs conocido (oculta el destino real), incluyendo subdominios de un acortador conocido (ej. "mirror1.bit.ly").
     """
     #Realiza la busqueda de URLs en el asunto y cuerpo de correo
     for url in _PATRON_URL.findall(texto or ""): #En caso sea vacio, se reemplaza por un espacio en blanco
@@ -219,8 +184,7 @@ def solicita_datos_sensibles(texto: str) -> bool:
 
 def saludo_generico(texto: str) -> bool:
     """
-    Detecta saludos genéricos ("Estimado cliente") en vez de un nombre propio,
-    señal típica de campañas de phishing masivas no personalizadas.
+    Detecta saludos genéricos ("Estimado cliente") en vez de un nombre propio, señal típica de campañas de phishing masivas no personalizadas.
     """
     texto_normalizado = (texto or "").lower() #Se transforma en minuscula. En caso sea vacio, se reemplaza por espacio en blanco
     return any(saludo in texto_normalizado for saludo in _SALUDOS_GENERICOS) #Devuelve verdadero apenas si encuentra un saludo generico en el correo
@@ -241,15 +205,10 @@ NOMBRES_FEATURES = [
 
 def extraer_features_numericas(asunto: str, cuerpo: str, remitente: str) -> list:
     """
-    Combina todas las features ingenieradas de un correo en un solo vector
-    numérico de longitud fija (6), en un orden estable y documentado:
+    Combina todas las features ingenieradas de un correo en un solo vector en un orden estable y documentado:
     [urls, url_sospechosa, urgencia, mayusculas, datos_sensibles, saludo_generico]
-
-    `remitente` se mantiene en la firma por compatibilidad con los
-    llamantes existentes (construir_matriz_features, explicar_clasificacion),
-    aunque ninguna feature lo use hoy -- dominio_coincide (la unica que lo
-    usaba) se removio como prueba, ver commit.
     """
+
     texto_completo = f"{asunto}\n{cuerpo}"
 
     #Si es True es 1 y False es 0
@@ -270,23 +229,21 @@ def crear_vectorizador_tfidf() -> TfidfVectorizer:
 
 def construir_matriz_features(df, vectorizador: TfidfVectorizer, ajustar: bool): #df= Data Frame (Correos)
     """
-    Construye la matriz de features final (TF-IDF + ingenieradas) para un
-    DataFrame con columnas 'asunto', 'cuerpo', 'remitente'.
+    Construye la matriz de features final (TF-IDF + ingenieradas) para un DataFrame con columnas 'asunto', 'cuerpo', 'remitente'.
 
-    ajustar=True  -> ajusta (fit) el vectorizador con estos textos (usar solo
-                      en entrenamiento, con el set de entrenamiento).
-    ajustar=False -> reutiliza un vectorizador ya ajustado (usar en
-                      evaluación y en el monitor de Outlook en producción).
+    ajustar=True  -> ajusta (fit) el vectorizador con estos textos.
+    ajustar=False -> reutiliza un vectorizador ya ajustado.
     """
+
     textos = (df["asunto"].fillna("") + " " + df["cuerpo"].fillna("")).tolist() #Lista la combinación del asunto y cuerpo de correo en String.
     if ajustar:
         matriz_tfidf = vectorizador.fit_transform(textos) #El vectorizador aprende el vocabulario (qué palabras existen, sus pesos IDF)
     else:
-        matriz_tfidf = vectorizador.transform(textos) #El vectorizador utiliza el vocabulario aprendido previamente
+        matriz_tfidf = vectorizador.transform(textos) #El vectorizador reutiliza el vocabulario aprendido previamente
 
     remitentes = df["remitente"].fillna("").tolist() #Remitentes vacios (NaN) se tratan como string vacio, igual que asunto/cuerpo
     features_numericas = np.array([ #Almacena el vector procesado
-        extraer_features_numericas(fila["asunto"], fila["cuerpo"], remitente) #Extrae el vector de las 7 ingenieradas
+        extraer_features_numericas(fila["asunto"], fila["cuerpo"], remitente) #Extrae el vector de las 6 ingenieradas
         for (_, fila), remitente in zip(df.iterrows(), remitentes) #Itera correo por (indice, fila), "_" descarta el indice
     ])
 
@@ -297,13 +254,7 @@ def construir_matriz_features(df, vectorizador: TfidfVectorizer, ajustar: bool):
 
 def _coef_del_modelo(modelo):
     """
-    Extrae los coeficientes lineales del modelo, sea un SVC(kernel="linear")
-    directo o uno envuelto en CalibratedClassifierCV (ver entrenar_modelo.py
-    -- reemplaza a SVC(probability=True), deprecado). CalibratedClassifierCV
-    no expone coef_ en su nivel superior a proposito (la calibracion en si
-    no es un modelo lineal); con ensemble=False el SVM real queda anidado
-    en un unico calibrated_classifiers_[0].estimator (se ajusta una sola
-    vez sobre todos los datos, la validacion cruzada solo calibra).
+    Extrae los coeficientes lineales del modelo.
     """
     if hasattr(modelo, "coef_"):
         return modelo.coef_
@@ -314,23 +265,10 @@ def explicar_clasificacion(
     modelo, vectorizador, asunto: str, cuerpo: str, remitente: str, top_n: int = 5, X=None,
 ) -> dict:
     """
-    Descompone la decision del SVM lineal para un unico correo: cuanto
-    contribuyo cada feature ingeniada y que palabras del texto (TF-IDF)
+    Descompone la decision del SVM lineal para un unico correo: cuanto contribuyo cada feature ingeniada y que palabras del texto (TF-IDF)
     empujaron mas hacia "phishing".
-
-    `X` es opcional: si el llamante ya construyo la matriz de features para
-    este mismo correo (p.ej. procesar_correo, que la necesita ademas para
-    clasificar), se puede pasar aqui para no recalcular el TF-IDF y las 7
-    features ingenieradas por segunda vez. Si no se provee, se construye
-    igual que antes (asunto/cuerpo/remitente son obligatorios en ambos
-    casos, para armar el DataFrame internamente cuando X es None).
-
-    Requiere un SVM lineal binario (SVC(kernel="linear") directo, o
-    envuelto en CalibratedClassifierCV -- ver _coef_del_modelo) con
-    modelo.classes_ == ['benigno', 'phishing'] (mismo invariante que ya
-    asume ETIQUETA_PHISHING en procesar_correo.py): coef_ positivo empuja
-    hacia phishing, negativo hacia benigno.
     """
+
     if X is None:
         df_correo = pd.DataFrame([{"asunto": asunto, "cuerpo": cuerpo, "remitente": remitente}])
         X = construir_matriz_features(df_correo, vectorizador, ajustar=False)
@@ -361,7 +299,8 @@ def explicar_clasificacion(
         for i in range(num_palabras_tfidf)
         if valores_tfidf[i] != 0.0
     ]
-    contribuciones_palabras.sort(key=lambda item: item[2], reverse=True)
+    contribuciones_palabras.sort(key=lambda item: item[2], reverse=True) #Ordena la lista contribuciones_palabras de mayor a menor contribución,
+    #para poder quedarse después solo con las palabras que más pesaron.
 
     return {
         "features_ingenieradas": features_ingenieradas,
